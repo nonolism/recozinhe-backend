@@ -17,7 +17,7 @@ copy .env.example .env               # Mac/Linux: cp .env.example .env
 python manage.py migrate
 python manage.py popular_dados       # categorias + catálogo inicial de receitas
 python manage.py createsuperuser     # opcional, para usar o /admin
-python manage.py runserver
+python manage.py runserver 0.0.0.0:8000   # o 0.0.0.0 deixa o celular acessar (app recozinhe-app)
 ```
 
 Testes: `python manage.py test` (não gastam cota da IA: usam o modo demonstração e respostas simuladas).
@@ -45,7 +45,7 @@ O painel http://127.0.0.1:8000/admin/ (com o usuário do `createsuperuser`) most
 | `GEMINI_API_KEY` | vazio | Chave do Google AI Studio |
 | `GEMINI_MODEL` | `gemini-3.5-flash` | Modelo usado; troque se o Google renomear ou se acabar a cota de um modelo |
 | `AI_PROVIDER` | `auto` | `auto` = Gemini se houver chave, senão demonstração · `gemini` · `demo` |
-| `AI_RECIPES_PER_PHOTO` | `1` | Quantas receitas a IA gera por foto |
+| `AI_RECIPES_PER_PHOTO` | `3` | Quantas receitas a IA gera por foto |
 | `AI_DAILY_LIMIT_PER_USER` | `20` | Fotos por usuário por dia, para não estourar a cota gratuita |
 
 **Modo demonstração:** sem chave, o backend não chama a IA e responde com dados prontos. Ele reconhece fotos cujo

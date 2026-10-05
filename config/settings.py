@@ -28,7 +28,8 @@ SECRET_KEY = os.getenv('secret_key', 'chave-de-desenvolvimento-troque-no-env')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+# Em desenvolvimento aceita qualquer endereço, para o celular acessar pelo IP do computador
+ALLOWED_HOSTS = ['*'] if DEBUG else []
 
 
 # Application definition
@@ -46,6 +47,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "config.middleware.DevCorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
