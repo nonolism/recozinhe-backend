@@ -4,9 +4,8 @@ O ReCozinhe é um app contra o desperdício de alimentos. O usuário fotografa (
 ou parte dele, que iria para o lixo. A **IA identifica o alimento** e devolve **receitas e formas de reaproveitamento**.
 O app também **acompanha o impacto**: quantos kg o usuário já reaproveitou ao longo do tempo.
 
-API em **Django + Django REST Framework**, no mesmo padrão do projeto `app-medcerto` (pasta `config/`, um app de API,
-model base com `timestamp_create`/`timestamp_update`, `User` customizado com `token`, ViewSets filtradas pelo usuário
-logado e autenticação por Token). A IA é o **Google Gemini**, que tem cota gratuita.
+API em **Django + Django REST Framework** .
+A IA é o **Google Gemini**, que tem cota gratuita.
 
 ## Como rodar
 
@@ -46,15 +45,11 @@ O painel http://127.0.0.1:8000/admin/ (com o usuário do `createsuperuser`) most
 | `GEMINI_API_KEY` | vazio | Chave do Google AI Studio |
 | `GEMINI_MODEL` | `gemini-3.5-flash` | Modelo usado; troque se o Google renomear ou se acabar a cota de um modelo |
 | `AI_PROVIDER` | `auto` | `auto` = Gemini se houver chave, senão demonstração · `gemini` · `demo` |
-| `AI_RECIPES_PER_PHOTO` | `3` | Quantas receitas a IA gera por foto |
+| `AI_RECIPES_PER_PHOTO` | `1` | Quantas receitas a IA gera por foto |
 | `AI_DAILY_LIMIT_PER_USER` | `20` | Fotos por usuário por dia, para não estourar a cota gratuita |
 
 **Modo demonstração:** sem chave, o backend não chama a IA e responde com dados prontos. Ele reconhece fotos cujo
-nome do arquivo (ou o campo `ingredient_name`) tenha *banana*, *limao*, *cenoura* ou *pao*. Serve de plano B na apresentação.
-
-**Atenção ao plano gratuito:** os limites de requisições por minuto e por dia mudam com o tempo (veja em
-https://ai.google.dev/gemini-api/docs/rate-limits), e no plano gratuito o Google pode usar o conteúdo enviado
-para melhorar os produtos dele. Não envie fotos pessoais.
+nome do arquivo (ou o campo `ingredient_name`) tenha *banana*, *limao*, *cenoura* ou *pao*.
 
 ## Como a IA é usada
 
