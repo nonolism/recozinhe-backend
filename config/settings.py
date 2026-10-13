@@ -26,10 +26,16 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv('secret_key', 'chave-de-desenvolvimento-troque-no-env')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# No seu computador fica True. No servidor (PythonAnywhere), coloque DEBUG=False no .env
+DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
 
 # Em desenvolvimento aceita qualquer endereço, para o celular acessar pelo IP do computador
-ALLOWED_HOSTS = ['*'] if DEBUG else []
+ALLOWED_HOSTS = ['*'] if DEBUG else [h.strip() for h in os.getenv('ALLOWED_HOSTS', '').split(',') if h.strip()]
+
+# Em produção (HTTPS): permite login no /admin/ e gera links https para as fotos
+CSRF_TRUSTED_ORIGINS = [f'https://{h}' for h in ALLOWED_HOSTS if h != '*']
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 
 # Application definition
@@ -123,6 +129,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"  # usado pelo "collectstatic" no servidor
 
 
 # Email

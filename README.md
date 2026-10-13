@@ -4,8 +4,9 @@ O ReCozinhe é um app contra o desperdício de alimentos. O usuário fotografa (
 ou parte dele, que iria para o lixo. A **IA identifica o alimento** e devolve **receitas e formas de reaproveitamento**.
 O app também **acompanha o impacto**: quantos kg o usuário já reaproveitou ao longo do tempo.
 
-API em **Django + Django REST Framework** .
-A IA é o **Google Gemini**, que tem cota gratuita.
+API em **Django + Django REST Framework**, no mesmo padrão do projeto `app-medcerto` (pasta `config/`, um app de API,
+model base com `timestamp_create`/`timestamp_update`, `User` customizado com `token`, ViewSets filtradas pelo usuário
+logado e autenticação por Token). A IA é o **Google Gemini**, que tem cota gratuita.
 
 ## Como rodar
 
@@ -20,7 +21,7 @@ python manage.py createsuperuser     # opcional, para usar o /admin
 python manage.py runserver 0.0.0.0:8000   # o 0.0.0.0 deixa o celular acessar (app recozinhe-app)
 ```
 
-Testes: `python manage.py test` (não gastam cota da IA: usam o modo demonstração e respostas simuladas).
+Testes: `python manage.py test` (15 testes) (não gastam cota da IA: usam o modo demonstração e respostas simuladas).
 
 ## Como testar
 
@@ -44,12 +45,19 @@ O painel http://127.0.0.1:8000/admin/ (com o usuário do `createsuperuser`) most
 |---|---|---|
 | `GEMINI_API_KEY` | vazio | Chave do Google AI Studio |
 | `GEMINI_MODEL` | `gemini-3.5-flash` | Modelo usado; troque se o Google renomear ou se acabar a cota de um modelo |
+| `GEMINI_FALLBACK_MODELS` | `gemini-3.5-flash-lite,gemini-3.1-flash-lite` | Modelos reserva, usados se o principal estiver sobrecarregado (503) ou sem cota (429) |
 | `AI_PROVIDER` | `auto` | `auto` = Gemini se houver chave, senão demonstração · `gemini` · `demo` |
 | `AI_RECIPES_PER_PHOTO` | `3` | Quantas receitas a IA gera por foto |
 | `AI_DAILY_LIMIT_PER_USER` | `20` | Fotos por usuário por dia, para não estourar a cota gratuita |
 
+**Modelo sobrecarregado (erro 503)?** Rode `python verificar_gemini.py`: ele testa quais modelos gratuitos estão respondendo com a sua chave e diz o que colocar no `.env`.
+
 **Modo demonstração:** sem chave, o backend não chama a IA e responde com dados prontos. Ele reconhece fotos cujo
-nome do arquivo (ou o campo `ingredient_name`) tenha *banana*, *limao*, *cenoura* ou *pao*.
+nome do arquivo (ou o campo `ingredient_name`) tenha *banana*, *limao*, *cenoura* ou *pao*. Serve de plano B na apresentação.
+
+**Atenção ao plano gratuito:** os limites de requisições por minuto e por dia mudam com o tempo (veja em
+https://ai.google.dev/gemini-api/docs/rate-limits), e no plano gratuito o Google pode usar o conteúdo enviado
+para melhorar os produtos dele. Não envie fotos pessoais.
 
 ## Como a IA é usada
 
@@ -102,3 +110,58 @@ Envie o token em todas as rotas, exceto login e cadastro: `Authorization: Token 
 - `apirecozinhe/ai.py` — tudo que fala com a IA (prompt, formato JSON, modo demonstração)
 - `apirecozinhe/services.py` — regras: processar foto, salvar receitas, estatísticas e impacto
 - `apirecozinhe/models.py`, `serializers.py`, `views.py`, `config/urls.py` — a API
+
+## Hospedar de graça no PythonAnywhere
+
+Assim o backend fica na internet, em `https://SEUUSUARIO.pythonanywhere.com`, e o app funciona em qualquer
+rede, sem o seu computador ligado. O plano gratuito (Beginner) tem 1 site, 512 MB de disco, aceita SQLite
+e libera acesso às APIs do Google (`*.googleapis.com`), que o Gemini usa.
+
+1. Crie uma conta gratuita em https://www.pythonanywhere.com (o nome de usuário vira o endereço do site).
+2. Na aba **Files**, envie o `recozinhe-backend.zip`. Depois abra um **Bash console** e rode:
+   ```bash
+   unzip recozinhe-backend.zip
+   cd recozinhe-backend
+   python3.13 -m venv venv          # Django 6.1 precisa de Python 3.12 ou mais novo
+   source venv/bin/activate
+   pip install -r requirements.txt
+   ```
+3. Crie o `.env` no servidor (`nano .env`) com:
+   ```
+   secret_key='uma-chave-nova-gerada'
+   GEMINI_API_KEY=sua-chave
+   GEMINI_MODEL=gemini-3-flash-preview
+   GEMINI_FALLBACK_MODELS=gemini-3.5-flash,gemini-3.5-flash-lite,gemini-3.6-flash
+   DEBUG=False
+   ALLOWED_HOSTS=SEUUSUARIO.pythonanywhere.com
+   ```
+4. Prepare o banco e os arquivos:
+   ```bash
+   python manage.py migrate
+   python manage.py popular_dados
+   python manage.py collectstatic --noinput
+   python manage.py createsuperuser
+   ```
+5. Na aba **Web**: **Add a new web app** → **Manual configuration** → mesma versão do Python do passo 2. Depois, na mesma página:
+   - **Virtualenv:** `/home/SEUUSUARIO/recozinhe-backend/venv`
+   - **WSGI configuration file:** clique no arquivo, apague tudo e coloque:
+     ```python
+     import os, sys
+     path = '/home/SEUUSUARIO/recozinhe-backend'
+     if path not in sys.path:
+         sys.path.insert(0, path)
+     os.environ['DJANGO_SETTINGS_MODULE'] = 'config.settings'
+     from django.core.wsgi import get_wsgi_application
+     application = get_wsgi_application()
+     ```
+   - **Static files:** adicione duas linhas:
+     `/static/` → `/home/SEUUSUARIO/recozinhe-backend/staticfiles` e
+     `/media/` → `/home/SEUUSUARIO/recozinhe-backend/media`
+   - **Force HTTPS:** ligado.
+   - Clique em **Reload**.
+6. Teste no navegador: `https://SEUUSUARIO.pythonanywhere.com/admin/`.
+7. No app, em `src/config.js`, use `const MANUAL_API_URL = 'https://SEUUSUARIO.pythonanywhere.com/api';`.
+
+**Atenção:** no plano gratuito o site para depois de 1 mês sem renovação. Uma vez por mês, entre na aba
+**Web** e clique em **Run until 1 month from today**. Quando mudar o código, envie os arquivos de novo e
+clique em **Reload**. Os erros do servidor aparecem no **Error log**, na aba Web.
