@@ -147,6 +147,10 @@ def _provider():
 
 
 def _call_gemini(contents, schema):
+    """
+    Chama o Gemini. Se o modelo principal estiver sobrecarregado (503), sem cota (429)
+    ou indisponível (404), tenta os modelos reserva de GEMINI_FALLBACK_MODELS, em ordem.
+    """
     try:
         from google import genai
         from google.genai import types
@@ -156,26 +160,50 @@ def _call_gemini(contents, schema):
     if not settings.GEMINI_API_KEY:
         raise AIError('GEMINI_API_KEY não configurada no arquivo .env.')
 
-    client = genai.Client(api_key=settings.GEMINI_API_KEY)
-    try:
-        response = client.models.generate_content(
-            model=settings.GEMINI_MODEL,
-            contents=contents,
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT,
-                response_mime_type='application/json',
-                response_json_schema=schema,
-                temperature=0.7,
-            ),
-        )
-        return json.loads(response.text)
-    except json.JSONDecodeError as exc:
-        raise AIError('A IA respondeu num formato inesperado. Tente novamente.') from exc
-    except Exception as exc:  # erros de rede, cota (429), chave inválida...
-        logger.exception('Erro ao chamar o Gemini')
-        if '429' in str(exc) or 'RESOURCE_EXHAUSTED' in str(exc):
-            raise AIError('Limite gratuito da IA atingido. Aguarde um minuto e tente de novo.') from exc
-        raise AIError(f'Não foi possível falar com a IA: {exc}') from exc
+    # Só 2 tentativas por modelo: se estiver sobrecarregado, é melhor passar logo para o reserva
+    client = genai.Client(
+        api_key=settings.GEMINI_API_KEY,
+        http_options=types.HttpOptions(retry_options=types.HttpRetryOptions(attempts=2)),
+    )
+    config = types.GenerateContentConfig(
+        system_instruction=SYSTEM_PROMPT,
+        response_mime_type='application/json',
+        response_json_schema=schema,
+        temperature=0.7,
+        # Não usamos "function calling"; desligar evita um aviso no terminal
+        automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+    )
+
+    models = [settings.GEMINI_MODEL] + [m for m in settings.GEMINI_FALLBACK_MODELS if m != settings.GEMINI_MODEL]
+    last_error = None
+    for model in models:
+        try:
+            response = client.models.generate_content(model=model, contents=contents, config=config)
+            return json.loads(response.text)
+        except json.JSONDecodeError as exc:
+            raise AIError('A IA respondeu num formato inesperado. Tente novamente.') from exc
+        except Exception as exc:  # erros de rede, cota, chave inválida...
+            last_error = exc
+            if _is_temporary(exc):
+                logger.warning('Gemini: modelo %s indisponível (%s). Tentando o próximo.', model, _short(exc))
+                continue
+            logger.exception('Erro ao chamar o Gemini')
+            raise AIError(f'Não foi possível falar com a IA: {_short(exc)}') from exc
+
+    # Todos os modelos falharam com erro temporário
+    if '429' in str(last_error) or 'RESOURCE_EXHAUSTED' in str(last_error):
+        raise AIError('Limite gratuito da IA atingido. Aguarde um minuto e tente de novo.') from last_error
+    raise AIError('A IA do Google está sobrecarregada no momento. Tente de novo em alguns instantes.') from last_error
+
+
+def _is_temporary(exc):
+    """Erros em que vale a pena tentar outro modelo: sobrecarga, cota ou modelo inexistente."""
+    text = str(exc)
+    return any(code in text for code in ('503', 'UNAVAILABLE', '429', 'RESOURCE_EXHAUSTED', '404', 'NOT_FOUND', '500', 'INTERNAL'))
+
+
+def _short(exc):
+    return str(exc)[:200]
 
 
 def _image_part(image_bytes):

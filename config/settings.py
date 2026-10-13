@@ -158,6 +158,10 @@ REST_FRAMEWORK = {
 AI_PROVIDER = os.getenv('AI_PROVIDER', 'auto')
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
 GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-3.5-flash')
+# Modelos reserva, usados quando o principal está sobrecarregado ou sem cota (separados por vírgula)
+GEMINI_FALLBACK_MODELS = [
+    m.strip() for m in os.getenv('GEMINI_FALLBACK_MODELS', 'gemini-3.5-flash-lite,gemini-3.1-flash-lite').split(',') if m.strip()
+]
 AI_RECIPES_PER_PHOTO = int(os.getenv('AI_RECIPES_PER_PHOTO', '3'))
 # Protege a cota gratuita: quantas fotos cada usuário pode analisar por dia
 AI_DAILY_LIMIT_PER_USER = int(os.getenv('AI_DAILY_LIMIT_PER_USER', '20'))

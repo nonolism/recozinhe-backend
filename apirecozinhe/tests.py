@@ -175,3 +175,35 @@ class ReCozinheApiTests(APITestCase):
 
     def test_reuse_requires_something(self):
         self.assertEqual(self.client.post('/api/reuses/', {}).status_code, 400)
+
+
+@override_settings(AI_PROVIDER='gemini', GEMINI_API_KEY='chave-teste', GEMINI_MODEL='modelo-principal',
+                   GEMINI_FALLBACK_MODELS=['modelo-reserva'])
+class GeminiFallbackTests(APITestCase):
+    """Se o modelo principal estiver sobrecarregado (503), o backend tenta o modelo reserva."""
+
+    def _client(self, side_effect):
+        client = mock.MagicMock()
+        client.models.generate_content.side_effect = side_effect
+        return client
+
+    def test_uses_fallback_when_overloaded(self):
+        ok = mock.MagicMock(text='{"recipes": []}')
+        client = self._client([Exception('503 UNAVAILABLE high demand'), ok])
+        with mock.patch('google.genai.Client', return_value=client):
+            self.assertEqual(ai._call_gemini(['oi'], ai.RECIPES_ONLY_SCHEMA), {'recipes': []})
+        models = [c.kwargs['model'] for c in client.models.generate_content.call_args_list]
+        self.assertEqual(models, ['modelo-principal', 'modelo-reserva'])
+
+    def test_all_models_overloaded(self):
+        client = self._client(Exception('503 UNAVAILABLE'))
+        with mock.patch('google.genai.Client', return_value=client):
+            with self.assertRaisesMessage(ai.AIError, 'sobrecarregada'):
+                ai._call_gemini(['oi'], ai.RECIPES_ONLY_SCHEMA)
+
+    def test_invalid_key_does_not_retry(self):
+        client = self._client(Exception('400 API key not valid'))
+        with mock.patch('google.genai.Client', return_value=client):
+            with self.assertRaisesMessage(ai.AIError, 'API key not valid'):
+                ai._call_gemini(['oi'], ai.RECIPES_ONLY_SCHEMA)
+        self.assertEqual(client.models.generate_content.call_count, 1)
